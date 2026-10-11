@@ -1,5 +1,5 @@
 /* Project Planner service worker: keeps the app available offline. */
-const VERSION = '24b1a9cd55';
+const VERSION = 'e22dbe2c15';
 const CACHE = 'project-planner-' + VERSION;
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"];
 

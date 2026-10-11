@@ -418,6 +418,13 @@ body.dragging,body.dragging *{cursor:grabbing !important;user-select:none;-webki
 .ci.k-pdl.overdue{background:var(--danger-weak);color:var(--danger)}
 @media (max-width:560px){.pdates{display:none}.cal-dots i.pj{border-radius:1px;width:8px;height:4px}}
 
+/* Shared Kanban */
+.kproj{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:650;color:var(--muted);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kproj .dot{width:8px;height:8px;background:var(--pc)}
+.kcol.extra{border-style:dashed}
+.kextra{font-size:10.5px;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:1px 6px;border-radius:99px;white-space:nowrap}
+.ktarget select{width:auto;min-height:34px;padding:4px 28px 4px 10px;font-size:14px}
+
 /* Goals & people */
 .rename-inline{border:0;background:none;padding:2px 4px;margin:0 -4px;border-radius:6px;font:inherit;color:inherit;font-weight:700;cursor:text}
 .rename-inline:hover{background:var(--surface-2)}
@@ -590,6 +597,7 @@ var TAB_LABELS={projects:'Projects',todo:'To Do',goals:'Goals',kanban:'Kanban',g
 var DEFAULT_TABS=['todo','goals','kanban','gantt','diary','calendar','stats'];
 var COLORS=['#2f6f6a','#3b5ba5','#7d4fa3','#b5476b','#c0622f','#a8841c','#4f8a3c','#5f6b7a'];
 var MAX_BACKUPS=6;
+var UMB='__general';
 
 var ICON={
   gear:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
@@ -662,6 +670,9 @@ function normalize(s){
   out.settings.tabOrder=to;
   var lb=out.settings.labels&&typeof out.settings.labels==='object'?out.settings.labels:{};out.settings.labels={umbrella:typeof lb.umbrella==='string'?lb.umbrella:'',overallGoals:typeof lb.overallGoals==='string'?lb.overallGoals:'',tabs:{}};
   if(lb.tabs&&typeof lb.tabs==='object')Object.keys(lb.tabs).forEach(function(k){if(TAB_LABELS[k]&&typeof lb.tabs[k]==='string')out.settings.labels.tabs[k]=lb.tabs[k]});
+  if(!out.projects.some(function(p){return p&&p.id===UMB})){var gc=defaultColumns();out.projects.unshift({id:UMB,general:true,name:'General',description:'',color:'#5f6b7a',order:0,sections:[{id:uid(),name:'General'}],columns:gc,doneColumnId:gc[gc.length-1].id,createdAt:nowISO(),updatedAt:nowISO()})}
+  out.projects=out.projects.filter(function(p){return p&&typeof p==='object'});
+  out.projects.forEach(function(p){if(p.id===UMB){p.general=true;p.order=0}else delete p.general});
   out.projects.forEach(function(p,i){
     if(!p.id)p.id=uid();
     p.name=p.name||'Untitled project';
@@ -701,10 +712,10 @@ function normalize(s){
   return out;
 }
 
-var state=(function(){var r=lsGet(DATA_KEY);if(!r)return emptyState();try{return normalize(JSON.parse(r))}catch(e){return emptyState()}})();
+var state=(function(){var r=lsGet(DATA_KEY);if(!r)return normalize(emptyState());try{return normalize(JSON.parse(r))}catch(e){return normalize(emptyState())}})();
 var device=Object.assign({theme:'system',syncedVersion:null,lastExportAt:null,lastImportAt:null},lsJSON(DEVICE_KEY,{}));
 var ui=Object.assign({projectId:null,umbrellaTab:'projects',projectTab:null,settings:false,taskId:null,showCompleted:true},lsJSON(UI_KEY,{}));
-if(ui.projectId&&!P(ui.projectId))ui.projectId=null;
+if(ui.projectId&&(!P(ui.projectId)||ui.projectId===UMB))ui.projectId=null;
 if(ui.taskId&&!T(ui.taskId))ui.taskId=null;
 
 function saveUI(){lsSet(UI_KEY,JSON.stringify(ui))}
@@ -725,7 +736,11 @@ function undo(){if(!undoSnap)return;state=normalize(JSON.parse(undoSnap));undoSn
 /* ---------- Data helpers ---------- */
 function P(id){for(var i=0;i<state.projects.length;i++)if(state.projects[i].id===id)return state.projects[i];return null}
 function T(id){for(var i=0;i<state.tasks.length;i++)if(state.tasks[i].id===id)return state.tasks[i];return null}
-function projectsSorted(){return state.projects.slice().sort(byOrder)}
+function projectsSorted(){return state.projects.filter(function(p){return !p.general}).sort(byOrder)}
+function GEN(){return P(UMB)}
+function withGeneral(){return [GEN()].concat(projectsSorted())}
+function projCount(){return state.projects.filter(function(p){return !p.general}).length}
+function hasData(){return projCount()>0||state.tasks.length>0||state.goals.length>0||state.diary.length>0}
 function tasksOf(pid){return state.tasks.filter(function(t){return t.projectId===pid})}
 function childrenOf(id){return state.tasks.filter(function(t){return t.parentId===id}).sort(byOrder)}
 function descendants(id){var out=[];(function walk(i){childrenOf(i).forEach(function(c){out.push(c);walk(c.id)})})(id);return out}
@@ -864,7 +879,7 @@ function applyTheme(){
   var r=document.documentElement;
   if(device.theme==='light'||device.theme==='dark')r.setAttribute('data-theme',device.theme);else r.removeAttribute('data-theme');
 }
-function needsExport(){return state.projects.length>0&&device.syncedVersion!==state.updatedAt}
+function needsExport(){return hasData()&&device.syncedVersion!==state.updatedAt}
 function currentTabs(){return ui.projectId?state.settings.tabOrder.slice():['projects'].concat(state.settings.tabOrder)}
 function currentTab(){
   var tabs=currentTabs(),t=ui.projectId?ui.projectTab:ui.umbrellaTab;
@@ -996,7 +1011,7 @@ function sectionHtml(p,s){
     '<form class="quick" data-submit="quickadd" data-project="'+p.id+'" data-section="'+s.id+'"><input type="text" placeholder="Add a task\u2026" aria-label="Add a task to '+esc(s.name)+'" autocomplete="off" enterkeyhint="done"><button class="btn sm" type="submit">Add</button></form></section>';
 }
 function renderTodo(){
-  var ps=ui.projectId?[P(ui.projectId)]:projectsSorted();
+  var ps=ui.projectId?[P(ui.projectId)]:withGeneral();
   if(!ps.length)return '<div class="empty"><h2>Nothing to do yet</h2><p>Tasks from all your projects will be listed here. Start by creating a project.</p><div class="row"><button class="btn primary" data-act="new-project">New project</button><button class="btn" data-act="example">Add example project</button></div></div>';
   var h='<div class="toolbar"><label class="toggle"><input type="checkbox" data-change="show-completed"'+(ui.showCompleted!==false?' checked':'')+'> Show completed</label></div>';
   if(ui.projectId){
@@ -1006,6 +1021,8 @@ function renderTodo(){
   }else{
     ps.forEach(function(p){
       var st=projStats(p.id);
+      if(p.general){h+='<div class="pgroup"><div class="pgroup-head static"><span class="dot" style="--pc:'+esc(p.color)+'"></span><button class="rename-inline" data-act="edit-project" data-id="'+p.id+'" title="Rename">'+esc(p.name)+'</button> <span class="muted">not in a project \u00b7 '+st.open+' open</span></div>'+
+        p.sections.map(function(s){return sectionHtml(p,s)}).join('')+'</div>'+(projCount()?'':'<p class="hint-sm" style="margin:-8px 0 20px">Tasks here belong to no project. <button class="btn sm ghost" data-act="new-project">+ New project</button></p>');return}
       h+='<div class="pgroup"><button class="pgroup-head" data-act="open-project" data-id="'+p.id+'" style="--pc:'+esc(p.color)+'"><span class="dot"></span>'+esc(p.name)+' <span class="muted">'+st.open+' open</span>'+ICON.chev+'</button>'+
         p.sections.map(function(s){return sectionHtml(p,s)}).join('')+'</div>';
     });
@@ -1036,7 +1053,7 @@ function renderPanel(){
   var crumbs='<button data-act="open-project-from-panel" data-id="'+p.id+'"><span style="color:'+esc(p.color)+'">\u25cf</span> '+esc(p.name)+'</button>'+
     chain.map(function(c){return '<span>\u203a</span><button data-act="open-task" data-id="'+c.id+'">'+esc(c.title)+'</button>'}).join('');
 
-  var projOpts=projectsSorted().map(function(q){return '<option value="'+q.id+'"'+(q.id===p.id?' selected':'')+'>'+esc(q.name)+'</option>'}).join('');
+  var projOpts=withGeneral().map(function(q){return '<option value="'+q.id+'"'+(q.id===p.id?' selected':'')+'>'+esc(q.general?q.name+' (not in a project)':q.name)+'</option>'}).join('');
   var secOpts=p.sections.map(function(s){return '<option value="'+s.id+'"'+(s.id===sectionIdOf(t,p)?' selected':'')+'>'+esc(s.name)+'</option>'}).join('');
   var banned={};banned[t.id]=1;descendants(t.id).forEach(function(d){banned[d.id]=1});
   var parentOpts='<option value="">\u2014 None (standalone) \u2014</option>'+tasksOf(p.id).filter(function(q){return !banned[q.id]}).sort(function(a,b){return a.title.localeCompare(b.title)})
@@ -1140,7 +1157,7 @@ function linkResults(t){
 /* ---------- Settings ---------- */
 var exportCache={version:null,code:''};
 function renderSettings(){
-  var ps=state.projects.length,ts=state.tasks.length;
+  var ps=projCount(),ts=state.tasks.length;
   var order=state.settings.tabOrder;
   var backups=lsJSON(BACKUP_KEY,[]);
   var share=!!navigator.share;
@@ -1166,7 +1183,7 @@ function renderSettings(){
   h+='<section class="card"><h3>Backups</h3><p>A backup is saved automatically on this device before every import, restore or erase.</p>'+
     (backups.length?'<ul class="backups">'+backups.map(function(b){return '<li><div><b>'+esc(fmtStamp(b.at))+'</b><small>'+esc(b.reason)+' \u00b7 '+plural(b.projects,'project')+', '+plural(b.tasks,'task')+'</small></div><button class="btn sm" data-act="restore" data-id="'+b.id+'">Restore</button></li>'}).join('')+'</ul>':'<p class="muted" style="margin:0;font-size:14px">No backups yet.</p>')+'</section>';
   h+='<section class="card danger"><h3>Erase all data</h3><p>Removes every project and task from this device. A backup is kept first.</p><button class="btn danger" data-act="erase">Erase all data</button></section>';
-  h+='<p class="about">Project Planner \u00b7 version 24b1a9cd55 \u00b7 your data stays on this device</p>';
+  h+='<p class="about">Project Planner \u00b7 version e22dbe2c15 \u00b7 your data stays on this device</p>';
   return h;
 }
 function afterSettings(){
@@ -1250,8 +1267,8 @@ function fileName(){var d=new Date();return 'project-planner-'+isoOf(d)+'-'+pad(
 
 function pushBackup(reason){
   var list=lsJSON(BACKUP_KEY,[]);
-  if(!state.projects.length&&!state.tasks.length)return;
-  list.unshift({id:uid(),at:nowISO(),reason:reason,projects:state.projects.length,tasks:state.tasks.length,data:JSON.stringify(state)});
+  if(!hasData())return;
+  list.unshift({id:uid(),at:nowISO(),reason:reason,projects:projCount(),tasks:state.tasks.length,data:JSON.stringify(state)});
   while(list.length>MAX_BACKUPS)list.pop();
   while(list.length&&!lsSet(BACKUP_KEY,JSON.stringify(list)))list.pop();
 }
@@ -1267,19 +1284,19 @@ function importFromText(text){
   decodeCode(text).then(function(obj){
     if(!obj||!Array.isArray(obj.projects)||!Array.isArray(obj.tasks))throw new Error('This code doesn\u2019t contain Project Planner data.');
     var inc=obj.updatedAt||null,cur=state.updatedAt;
-    var hasLocal=state.projects.length>0;
+    var hasLocal=hasData(),incP=obj.projects.filter(function(x){return x&&!x.general&&x.id!==UMB}).length;
     var older=hasLocal&&inc&&cur&&inc<cur,same=inc&&inc===cur;
     var body=(same?'<p><b>This device already has this exact version.</b> Importing changes nothing.</p>':'')+
       (older?'<div class="warn" style="margin:0 0 10px">The code is <b>older</b> than what\u2019s on this device. Importing it will replace newer changes.</div>':'')+
-      '<dl class="cmp"><dt>In the code</dt><dd>'+esc(fmtExact(inc))+' \u00b7 '+plural(obj.projects.length,'project')+', '+plural(obj.tasks.length,'task')+'</dd>'+
-      '<dt>On this device</dt><dd>'+(hasLocal?esc(fmtExact(cur))+' \u00b7 ':'')+plural(state.projects.length,'project')+', '+plural(state.tasks.length,'task')+'</dd></dl>'+
+      '<dl class="cmp"><dt>In the code</dt><dd>'+esc(fmtExact(inc))+' \u00b7 '+plural(incP,'project')+', '+plural(obj.tasks.length,'task')+'</dd>'+
+      '<dt>On this device</dt><dd>'+(hasLocal?esc(fmtExact(cur))+' \u00b7 ':'')+plural(projCount(),'project')+', '+plural(state.tasks.length,'task')+'</dd></dl>'+
       (hasLocal?'<p>A backup of this device\u2019s data is kept, so you can undo from Settings \u2192 Backups.</p>':'');
     return openModal({title:'Replace this device\u2019s data?',body:body,buttons:[{label:'Cancel',value:false},{label:older?'Replace anyway':'Replace',value:true,cls:older?'danger solid':'primary'}]}).then(function(ok){
       if(!ok)return;
       pushBackup('Before import');
       replaceState(obj,true);
       device.lastImportAt=nowISO();device.syncedVersion=state.updatedAt;saveDevice();
-      render();toast('Imported '+plural(state.projects.length,'project')+' and '+plural(state.tasks.length,'task'));
+      render();toast('Imported '+plural(projCount(),'project')+' and '+plural(state.tasks.length,'task'));
     });
   }).catch(function(e){openModal({title:'Couldn\u2019t import',body:'<p>'+esc(e.message)+'</p>',buttons:[{label:'OK',value:true,cls:'primary'}]})});
 }
@@ -1327,7 +1344,7 @@ function projectDlg(p){
       '<div class="fld"><label for="pj-dl">Deadline</label><input id="pj-dl" class="inp" type="date" value="'+esc(p&&p.deadline||'')+'"></div>'+
       '<div class="fld hint" style="align-self:end;font-size:12px;color:var(--faint)">All optional. Past dates are fine.</div></div>'+
     '<div class="fld"><span class="lbl">Colour</span><div class="swatches">'+COLORS.map(function(c){return '<label style="--c:'+c+'"><input type="radio" name="pj-color" value="'+c+'"'+(c===color?' checked':'')+' aria-label="Colour '+c+'"><span></span></label>'}).join('')+'</div></div>';
-  return openModal({title:p?'Edit project':'New project',wide:true,focus:'#pj-name',body:body,buttons:[{label:'Cancel',value:null},{label:p?'Save':'Create project',cls:'primary',value:function(r){
+  return openModal({title:p?(p.general?'Edit \u201c'+p.name+'\u201d (tasks not in a project)':'Edit project'):'New project',wide:true,focus:'#pj-name',body:body,buttons:[{label:'Cancel',value:null},{label:p?'Save':'Create project',cls:'primary',value:function(r){
     var n=r.querySelector('#pj-name').value.trim();if(!n){r.querySelector('#pj-name').focus();return undefined}
     var c=r.querySelector('input[name=pj-color]:checked');
     var sd=r.querySelector('#pj-start').value||'',ed=r.querySelector('#pj-end').value||'';
@@ -1357,7 +1374,7 @@ var A={
   'open-settings':function(){ui.settings=true;saveUI();render();window.scrollTo(0,0)},
   'close-settings':function(){ui.settings=false;saveUI();render()},
   'open-project':function(el){openProject(el.getAttribute('data-id'))},
-  'open-project-from-panel':function(el){ui.taskId=null;openProject(el.getAttribute('data-id'))},
+  'open-project-from-panel':function(el){ui.taskId=null;var id=el.getAttribute('data-id');if(id===UMB){saveUI();goHome();return}openProject(id)},
   'new-project':function(){projectDlg(null).then(function(v){if(!v)return;var p;commit(function(){p=newProject(v.name,v.description,v.color);p.startDate=v.startDate;p.endDate=v.endDate;p.deadline=v.deadline});openProject(p.id);ui.projectTab='todo';saveUI();render();toast('Project created')})},
   'edit-project':function(el){var p=P(el.getAttribute('data-id'));projectDlg(p).then(function(v){if(!v)return;commit(function(){p.name=v.name;p.description=v.description;p.color=v.color;p.startDate=v.startDate;p.endDate=v.endDate;p.deadline=v.deadline;p.updatedAt=nowISO()})})},
   'project-menu':function(el){
@@ -1520,6 +1537,34 @@ var A={
   'rename-overall':function(){promptDlg('Rename heading','Heading',overallGoalsTitle()).then(function(v){if(v)commit(function(){labels().overallGoals=v})})},
   'tab-rename':function(el){var t=el.getAttribute('data-tab');promptDlg('Rename tab','Tab name (default: '+TAB_LABELS[t]+')',tabLabel(t)).then(function(v){if(v)commit(function(){labels().tabs[t]=v})})},
   'names-reset':function(){confirmDlg('Reset all names?','Tab names, the start page title and the overall goals heading go back to their defaults. Your projects, sections and tasks keep their names.','Reset').then(function(ok){if(ok)commit(function(){state.settings.labels={tabs:{}}})})},
+  'scol-rename':function(el){
+    var key=el.getAttribute('data-key'),col=sharedColumns().find(function(c){return c.key===key});if(!col)return;
+    promptDlg('Rename column','Column name \u2014 renamed in every project that has it',col.name).then(function(v){if(!v)return;var n;commit(function(){n=renameShared(key,v)});if(n)toast('Renamed in '+plural(n,'project')+' too')});
+  },
+  'scol-menu':function(el){
+    var key=el.getAttribute('data-key'),cols=sharedColumns(),c=cols.find(function(x){return x.key===key});if(!c)return;
+    var g=GEN(),gi=g.columns.findIndex(function(x){return ckey(x.name)===key}),opts=[{label:'Rename everywhere',value:'rename'}];
+    if(c.own){
+      if(gi>0)opts.push({label:'Move left',value:'left'});
+      if(gi<g.columns.length-1)opts.push({label:'Move right',value:'right'});
+      if(c.done)opts.push({label:'Stop treating as the Done column',value:'done-off'});else if(g.columns.length>1)opts.push({label:'Use as the Done column',value:'done-on'});
+      if(g.columns.length>1)opts.push({label:'Remove from shared columns',value:'delete',cls:'danger'});
+    }else opts.push({label:'Add to the shared columns',value:'adopt'});
+    sheet(c.name,opts).then(function(v){
+      if(v==='rename'){el.setAttribute('data-key',key);A['scol-rename'](el)}
+      else if(v==='left'||v==='right'){var j=v==='left'?gi-1:gi+1;commit(function(){var x=g.columns[gi];g.columns[gi]=g.columns[j];g.columns[j]=x})}
+      else if(v==='done-on'){commit(function(){g.doneColumnId=g.columns[gi].id;tasksOf(UMB).forEach(function(t){reconcile(t)})})}
+      else if(v==='done-off'){commit(function(){g.doneColumnId=null})}
+      else if(v==='adopt'){commit(function(){ensureCol(g,key,c.name)})}
+      else if(v==='delete'){
+        var inProj=projectsSorted().filter(function(p){return p.columns.some(function(x){return ckey(x.name)===key})}).length,gen=tasksOf(UMB).filter(function(t){return cardKey(t)===key}).length;
+        var target=g.columns[gi>0?gi-1:1];
+        confirmDlg('Remove \u201c'+c.name+'\u201d?',(gen?'Its '+plural(gen,'general card')+' move to \u201c'+esc(target.name)+'\u201d. ':'')+(inProj?'It stays as a column while '+plural(inProj,'project')+' still use it.':''),'Remove',true).then(function(ok){
+          if(!ok)return;snapshot();commit(function(){var cid=g.columns[gi].id;if(g.doneColumnId===cid)g.doneColumnId=null;g.columns.splice(gi,1);tasksOf(UMB).forEach(function(t){if(t.columnId===cid)setColumn(t,target.id)})});toast('Column removed',{label:'Undo',fn:undo});
+        });
+      }
+    });
+  },
   'toast-action':function(){var f=toast.action;$('#toast-root').innerHTML='';toast.action=null;if(f)f()},
   'theme':function(el){device.theme=el.getAttribute('data-v');saveDevice();render()},
   'tab-move':function(el){var i=+el.getAttribute('data-i'),j=i+(+el.getAttribute('data-dir')),o=state.settings.tabOrder;if(j<0||j>=o.length)return;commit(function(){var x=o[i];o[i]=o[j];o[j]=x})},
@@ -1580,9 +1625,10 @@ function kanbanCards(p,cid){
   return tasksOf(p.id).filter(function(t){return (subs||isTop(t))&&colOf(t,p)===cid})
     .sort(function(a,b){return (a.kOrder||0)-(b.kOrder||0)||byOrder(a,b)});
 }
-function cardHtml(t){
-  var par=t.parentId?T(t.parentId):null;
-  return '<div class="kcard'+(t.done?' done':'')+'" data-act="open-task" data-id="'+t.id+'" data-drag="card" tabindex="0">'+
+function cardHtml(t,shared){
+  var par=t.parentId?T(t.parentId):null,tp=P(t.projectId);
+  return '<div class="kcard'+(t.done?' done':'')+'"'+(shared?' style="--pc:'+esc(tp.color)+'"':'')+' data-act="open-task" data-id="'+t.id+'" data-drag="card" tabindex="0">'+
+    (shared?'<div class="kproj"><span class="dot"></span>'+esc(tp.name)+'</div>':'')+
     (par?'<div class="kparent">'+ICON.sub+'<span>'+esc(par.title)+'</span></div>':'')+
     '<div class="ktitle">'+esc(t.title)+'</div><div class="chips">'+chipsFor(t)+'</div></div>';
 }
@@ -1596,7 +1642,7 @@ function boardHtml(p){
       (c.id===d?'<span class="kdone" title="Cards in this column count as done">'+ICON.check+'Done</span>':'')+
       '<span class="count">'+cards.length+'</span>'+
       '<button class="iconbtn sm" data-act="column-menu" data-project="'+p.id+'" data-col="'+c.id+'" aria-label="Column options">'+ICON.more+'</button></div>'+
-      '<div class="kcards">'+cards.map(cardHtml).join('')+'</div>'+
+      '<div class="kcards">'+cards.map(function(t){return cardHtml(t)}).join('')+'</div>'+
       '<form class="quick kquick" data-submit="kadd" data-project="'+p.id+'" data-col="'+c.id+'"><input type="text" placeholder="Add a card…" aria-label="Add a card to '+esc(c.name)+'" autocomplete="off" enterkeyhint="done"><button class="btn sm" type="submit">Add</button></form></div>';
   });
   h+='<button class="kcol kcol-add" data-act="add-column" data-project="'+p.id+'">+ Add column</button></div>';
@@ -1607,14 +1653,56 @@ function noProjectsHtml(title,msg){
 }
 function renderKanban(){
   var ps=ui.projectId?[P(ui.projectId)]:projectsSorted();
-  if(!ps.length)return noProjectsHtml('Your board is empty','Cards from all your projects appear here, each project with its own columns.');
+  if(!ps.length&&ui.projectId)return noProjectsHtml('Your board is empty','Cards from all your projects appear here, each project with its own columns.');
   var h='<div class="toolbar"><label class="toggle"><input type="checkbox" data-change="kanban-subtasks"'+(ui.kanbanSubtasks?' checked':'')+'> Show subtasks as separate cards</label>'+
     '<span class="hint-sm">'+(COARSE?'Press and hold a card to drag it':'Drag cards between columns')+'</span></div>';
   if(ui.projectId)h+=boardHtml(ps[0]);
+  else if(true){h=sharedBoardHtml();}
   else ps.forEach(function(p){
     h+='<div class="pgroup"><button class="pgroup-head" data-act="open-project" data-id="'+p.id+'" style="--pc:'+esc(p.color)+'"><span class="dot"></span>'+esc(p.name)+' <span class="muted">'+projStats(p.id).open+' open</span>'+ICON.chev+'</button>'+boardHtml(p)+'</div>';
   });
   return h;
+}
+
+/* Shared board for the umbrella view: one set of columns for everything.
+   Its own columns live on the General list; columns that only exist in projects are added by name. */
+function ckey(n){return String(n||'').trim().toLowerCase()}
+function sharedColumns(){
+  var g=GEN(),d=doneCol(g),cols=[],seen={};
+  g.columns.forEach(function(c){var k=ckey(c.name);if(seen[k])return;seen[k]=1;cols.push({key:k,name:c.name,id:c.id,own:true,done:c.id===d})});
+  projectsSorted().forEach(function(p){p.columns.forEach(function(c){var k=ckey(c.name);if(seen[k])return;seen[k]=1;
+    var di=cols.findIndex(function(x){return x.done});var item={key:k,name:c.name,own:false};if(di>-1)cols.splice(di,0,item);else cols.push(item)})});
+  return cols;
+}
+function cardKey(t){var p=P(t.projectId),cid=colOf(t,p),c=p.columns.find(function(x){return x.id===cid});return c?ckey(c.name):''}
+function ensureCol(p,key,name){
+  var c=p.columns.find(function(x){return ckey(x.name)===key});if(c)return {id:c.id,created:false};
+  c={id:uid(),name:name};var d=doneCol(p),i=d?p.columns.findIndex(function(x){return x.id===d}):p.columns.length;p.columns.splice(i,0,c);return {id:c.id,created:true};
+}
+function sharedBoardHtml(){
+  var cols=sharedColumns(),subs=!!ui.kanbanSubtasks,target=ui.kanbanTarget&&P(ui.kanbanTarget)?ui.kanbanTarget:UMB;
+  var all=state.tasks.filter(function(t){return subs||isTop(t)}).sort(function(a,b){return (a.kOrder||0)-(b.kOrder||0)||byOrder(a,b)});
+  var by={};all.forEach(function(t){var k=cardKey(t);(by[k]=by[k]||[]).push(t)});
+  var h='<div class="toolbar"><label class="toggle"><input type="checkbox" data-change="kanban-subtasks"'+(subs?' checked':'')+'> Show subtasks as separate cards</label>'+
+    '<label class="toggle ktarget">New cards go to <select class="inp" data-change="kanban-target" aria-label="New cards go to">'+withGeneral().map(function(p){return '<option value="'+p.id+'"'+(p.id===target?' selected':'')+'>'+esc(p.general?p.name+' (no project)':p.name)+'</option>'}).join('')+'</select></label></div>';
+  h+='<div class="board shared" data-project="__all">';
+  cols.forEach(function(c){
+    var cards=by[c.key]||[];
+    h+='<div class="kcol'+(c.own?'':' extra')+'" data-col="'+esc(c.key)+'" data-name="'+esc(c.name)+'" data-project="__all"><div class="kcol-head">'+
+      '<h3 data-act="scol-rename" data-key="'+esc(c.key)+'" title="Rename column">'+esc(c.name)+'</h3>'+
+      (c.done?'<span class="kdone" title="Cards in this column count as done">'+ICON.check+'Done</span>':'')+
+      (c.own?'':'<span class="kextra" title="This column exists in some of your projects">from projects</span>')+
+      '<span class="count">'+cards.length+'</span>'+
+      '<button class="iconbtn sm" data-act="scol-menu" data-key="'+esc(c.key)+'" aria-label="Column options">'+ICON.more+'</button></div>'+
+      '<div class="kcards">'+cards.map(function(t){return cardHtml(t,true)}).join('')+'</div>'+
+      '<form class="quick kquick" data-submit="kadd-all" data-col="'+esc(c.key)+'" data-name="'+esc(c.name)+'"><input type="text" placeholder="Add a card\u2026" aria-label="Add a card to '+esc(c.name)+'" autocomplete="off" enterkeyhint="done"><button class="btn sm" type="submit">Add</button></form></div>';
+  });
+  h+='<button class="kcol kcol-add" data-act="add-column" data-project="'+UMB+'">+ Add column</button></div>';
+  h+='<p class="hint-sm" style="margin-top:6px">'+(COARSE?'Press and hold a card to drag it.':'Drag cards between columns.')+' The coloured edge and label show which project a card belongs to. Moving a card here moves it in its project too.</p>';
+  return h;
+}
+function renameShared(key,newName){
+  var n=0;state.projects.forEach(function(p){p.columns.forEach(function(c){if(ckey(c.name)===key){c.name=newName;if(!p.general)n++}})});return n;
 }
 
 /* ---------- Gantt ---------- */
@@ -1634,7 +1722,7 @@ function spanOf(t,ov){
 }
 function ganttScopeTasks(){return ui.projectId?tasksOf(ui.projectId):state.tasks}
 function renderGantt(){
-  var ps=ui.projectId?[P(ui.projectId)]:projectsSorted();
+  var ps=ui.projectId?[P(ui.projectId)]:withGeneral().filter(function(p){return !p.general||tasksOf(p.id).length});
   if(!ps.length)return noProjectsHtml('No schedule yet','Your tasks appear here as bars on a timeline once they have dates.');
   var zoom=ZOOM[ui.ganttZoom]?ui.ganttZoom:'day',day=ZOOM[zoom];G.day=day;
   var showDone=ui.showCompleted!==false,col=ui.ganttCollapsed||{},td=today();
@@ -1703,7 +1791,7 @@ function renderGantt(){
     var id=r.type==='project'?p.id:r.t.id,hasKids=(r.type==='project'&&!r.own)||r.kids>0;
     h+='<div class="g-name" style="padding-left:'+(6+r.depth*16)+'px">'+
       (hasKids?'<button class="g-toggle'+(col[id]?'':' open')+'" data-act="gantt-collapse" data-id="'+id+'" aria-label="'+(col[id]?'Expand':'Collapse')+'">'+ICON.chev+'</button>':'<span class="g-sp"></span>')+
-      (r.type==='project'?'<span class="dot"></span><button class="g-title" data-act="'+(r.own?'edit-project':'open-project')+'" data-id="'+p.id+'">'+esc(p.name)+'</button>':
+      (r.type==='project'?'<span class="dot"></span><button class="g-title" data-act="'+(r.own||p.general?'edit-project':'open-project')+'" data-id="'+p.id+'">'+esc(p.name)+'</button>':
         '<button class="g-title" data-act="open-task" data-id="'+id+'">'+esc(r.t.title)+'</button>')+'</div>';
     if(r.type==='project'){
       var ps2=null;tasksOf(p.id).forEach(function(t){var s=spanOwn(t);if(!s)return;if(!ps2)ps2={s:s.s,e:s.e};else{if(s.s<ps2.s)ps2.s=s.s;if(s.e>ps2.e)ps2.e=s.e}});
@@ -1712,7 +1800,7 @@ function renderGantt(){
       if(p.startDate||p.endDate){var pa=p.startDate||p.endDate,pb=p.endDate||p.startDate;
         pin+='<div class="g-plan" data-act="edit-project" data-id="'+p.id+'" style="left:'+dayIdx(pa)*day+'px;width:'+(dayIdx(pb)-dayIdx(pa)+1)*day+'px" data-tip="'+esc('Planned: '+projDatesTxt(p)+' \u00b7 click to edit')+'"></div>';}
       if(p.deadline)pin+='<div class="g-dl '+projDeadlineState(p)+'" style="left:'+((dayIdx(p.deadline)+1)*day-2)+'px" data-tip="'+esc('Project deadline \u00b7 '+fmtDate(p.deadline))+'"></div>';
-      if(!ps2&&!p.startDate&&!p.endDate)pin+='<button class="g-setp" data-act="edit-project" data-id="'+p.id+'">+ Set project dates</button>';
+      if(!ps2&&!p.startDate&&!p.endDate&&!p.general)pin+='<button class="g-setp" data-act="edit-project" data-id="'+p.id+'">+ Set project dates</button>';
       h+='<div class="g-track" style="width:'+W+'px">'+pin+'</div>';
     }else{
       var t=r.t,sp=spanOf(t),inner='',mds=(t.milestones||[]).filter(function(m){return m.date}),undated=!sp&&!mds.length,labelEnd=null;
@@ -1830,7 +1918,7 @@ document.addEventListener('contextmenu',function(e){if(e.target.closest&&e.targe
 function kanbanBegin(p,x,y){
   var el=p.el,r=el.getBoundingClientRect(),board=el.closest('.board');if(!board)return;
   var g=el.cloneNode(true);g.classList.add('kghost');g.removeAttribute('data-drag');g.removeAttribute('data-act');
-  g.style.width=r.width+'px';g.style.left=r.left+'px';g.style.top=r.top+'px';g.style.setProperty('--pc',board.style.getPropertyValue('--pc'));
+  g.style.width=r.width+'px';g.style.left=r.left+'px';g.style.top=r.top+'px';if(board.style.getPropertyValue('--pc'))g.style.setProperty('--pc',board.style.getPropertyValue('--pc'));
   document.body.appendChild(g);el.classList.add('kplaceholder');
   drag={kind:'card',touch:p.touch,el:el,ghost:g,ox:x-r.left,oy:y-r.top,pid:board.getAttribute('data-project'),id:el.getAttribute('data-id')};
 }
@@ -1848,7 +1936,13 @@ function kanbanEnd(d){
   var list=d.el.parentNode,col=list.closest('.kcol'),t=T(d.id);if(!t||!col)return renderMain();
   var cid=col.getAttribute('data-col');
   var ids=Array.prototype.map.call(list.querySelectorAll('.kcard'),function(c){return c.getAttribute('data-id')});
-  var p=P(t.projectId),wasDone=t.done;
+  var p=P(t.projectId),wasDone=t.done,made=false;
+  if(col.getAttribute('data-project')==='__all'){var key=cid,nm=col.getAttribute('data-name');
+    commit(function(){var r=ensureCol(p,key,nm);made=r.created;if(colOf(t,p)!==r.id)setColumn(t,r.id);ids.forEach(function(id,i){var x=T(id);if(x)x.kOrder=i+1});touch(t)});
+    if(made)toast('Added a \u201c'+nm+'\u201d column to '+p.name);
+    else if(!wasDone&&t.done)toast('Marked done');else if(wasDone&&!t.done)toast('Marked not done');
+    return;
+  }
   commit(function(){if(colOf(t,p)!==cid)setColumn(t,cid);ids.forEach(function(id,i){var x=T(id);if(x)x.kOrder=i+1});touch(t)});
   if(!wasDone&&t.done)toast('Marked done');else if(wasDone&&!t.done)toast('Marked not done');
 }
@@ -1924,7 +2018,7 @@ function refChip(r,clickable){
   return '<span class="rchip"'+(clickable?' data-act="open-task" data-id="'+t.id+'" role="button"':'')+'>'+ICON.check.replace('width="13" height="13"','width="11" height="11"')+esc(t.title)+(ui.projectId&&tp.id===ui.projectId?'':'<span class="rp">· '+esc(tp.name)+'</span>')+'</span>';
 }
 function renderDiary(){
-  if(!state.projects.length&&!state.diary.length)return noProjectsHtml('Your diary is empty','Write dated entries and connect them to everything, a project or a single task.');
+  if(!hasData())return noProjectsHtml('Your diary is empty','Write dated entries and connect them to everything, a project or a single task.');
   var q=(ui.diaryQuery||'').trim().toLowerCase();
   var list=diaryInScope();
   var total=list.length;
@@ -2049,7 +2143,7 @@ function calItemHtml(it,full){
 }
 function weekStart(iso){var d=parseISO(iso);return addDays(iso,-((d.getDay()+6)%7))}
 function renderCalendar(){
-  if(!state.projects.length)return noProjectsHtml('Nothing scheduled yet','Start and end dates, deadlines, milestones and diary entries appear here.');
+  if(!hasData())return noProjectsHtml('Nothing scheduled yet','Start and end dates, deadlines, milestones and diary entries appear here.');
   var view=ui.calView==='week'?'week':'month',td=today(),cur=ui.calDate||td,sel=ui.calSel||null;
   var d=parseISO(cur),from,to,label;
   if(view==='month'){
@@ -2094,7 +2188,7 @@ function renderCalendar(){
   return h;
 }
 function dayDetail(day,its){
-  var dd=parseISO(day),projOpts=projectsSorted().map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>'}).join('');
+  var dd=parseISO(day),projOpts=withGeneral().map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>'}).join('');
   return '<section class="card dayd" id="day-detail"><div class="row" style="justify-content:space-between"><h3>'+esc(dd.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'}))+'</h3>'+
     '<button class="iconbtn sm" data-act="cal-close" aria-label="Close">'+ICON.close+'</button></div>'+
     (its.length?'<div class="day-items">'+its.map(function(it){return calItemHtml(it,true)}).join('')+'</div>':'<p class="muted" style="margin:6px 0 0;font-size:14px">Nothing on this day.</p>')+
@@ -2190,10 +2284,10 @@ function progressChart(style,items){
   return '<div class="pbars">'+items.map(function(it){return '<div class="pb" data-tip="'+esc(it.name+': '+it.done+' of '+it.total+' done')+'"><div class="pbt"><span><i style="background:'+it.color+'"></i>'+esc(it.name)+'</span><b>'+it.pct+'%</b></div><div class="bar"><i style="width:'+it.pct+'%;background:'+it.color+'"></i></div><small>'+it.done+' of '+plural(it.total,'task')+' done</small></div>'}).join('')+'</div>';
 }
 function renderStats(){
-  if(!state.projects.length)return noProjectsHtml('No progress to show yet','Charts of your progress appear here once you have projects and tasks.');
+  if(!hasData())return noProjectsHtml('No progress to show yet','Charts of your progress appear here once you have projects and tasks.');
   var range=ui.statsRange||'3m',td=today(),ts=statsTasks();
   var filt='<div class="toolbar statools">';
-  if(!ui.projectId)filt+='<select class="inp" style="max-width:240px" data-change="stats-project" aria-label="Project"><option value="">All projects</option>'+projectsSorted().map(function(p){return '<option value="'+p.id+'"'+(ui.statsProject===p.id?' selected':'')+'>'+esc(p.name)+'</option>'}).join('')+'</select>';
+  if(!ui.projectId)filt+='<select class="inp" style="max-width:240px" data-change="stats-project" aria-label="Project"><option value="">All projects</option>'+withGeneral().map(function(p){return '<option value="'+p.id+'"'+(ui.statsProject===p.id?' selected':'')+'>'+esc(p.name)+'</option>'}).join('')+'</select>';
   filt+='<div class="seg" role="group" aria-label="Time range">'+[['4w','4 weeks'],['3m','3 months'],['6m','6 months'],['12m','12 months'],['all','All time']].map(function(r){return '<button data-act="stats-range" data-r="'+r[0]+'" class="'+(range===r[0]?'on':'')+'">'+r[1]+'</button>'}).join('')+'</div></div>';
   if(!ts.length)return filt+'<div class="empty"><h2>No tasks yet</h2><p>Add tasks to see progress here.</p></div>';
 
@@ -2229,7 +2323,7 @@ function renderStats(){
   // Progress by project/section
   var prog=[],pal=['var(--s1)','var(--s2)','var(--s3)','var(--s4)','var(--s5)','var(--s6)','var(--s7)','var(--s8)'];
   if(!ui.projectId&&!ui.statsProject){
-    projectsSorted().forEach(function(p){var x=tasksOf(p.id),dn=x.filter(function(t){return t.done}).length;prog.push({name:p.name,done:dn,total:x.length,pct:x.length?Math.round(dn/x.length*100):0,color:p.color})});
+    withGeneral().forEach(function(p){var x=tasksOf(p.id);if(p.general&&!x.length)return;var dn=x.filter(function(t){return t.done}).length;prog.push({name:p.name,done:dn,total:x.length,pct:x.length?Math.round(dn/x.length*100):0,color:p.color})});
   }else{
     var pp=P(ui.projectId||ui.statsProject);
     pp.sections.forEach(function(s){var x=[];rootsIn(pp,s.id).forEach(function(r){x.push(r);x.push.apply(x,descendants(r.id))});var dn=x.filter(function(t){return t.done}).length;prog.push({name:s.name,done:dn,total:x.length,pct:x.length?Math.round(dn/x.length*100):0,color:pp.color})});
@@ -2241,7 +2335,8 @@ function renderStats(){
 
   // Kanban status
   var colMap={},colOrder=[];
-  (ui.projectId?[P(ui.projectId)]:ui.statsProject&&P(ui.statsProject)?[P(ui.statsProject)]:projectsSorted()).forEach(function(p){p.columns.forEach(function(c){if(!(c.name in colMap)){colMap[c.name]=0;colOrder.push(c.name)}})});
+  if(!ui.projectId&&!(ui.statsProject&&P(ui.statsProject)))sharedColumns().forEach(function(c){if(!(c.name in colMap)){colMap[c.name]=0;colOrder.push(c.name)}});
+  else (ui.projectId?[P(ui.projectId)]:[P(ui.statsProject)]).forEach(function(p){p.columns.forEach(function(c){if(!(c.name in colMap)){colMap[c.name]=0;colOrder.push(c.name)}})});
   ts.forEach(function(t){var p=P(t.projectId),c=p.columns.find(function(c){return c.id===colOf(t,p)});var n=c?c.name:'—';if(!(n in colMap)){colMap[n]=0;colOrder.push(n)}colMap[n]++});
   var colItems=colOrder.map(function(n,i){return {name:n,v:colMap[n],color:pal[Math.min(i,7)]}});
   var s4=styleSeg('status',['bar','donut','table'],'bar');
@@ -2364,6 +2459,11 @@ document.addEventListener('submit',function(e){
     var gp=f.getAttribute('data-p')||null,gs=f.getAttribute('data-s');
     commit(function(){var sib=goalsIn(gp,gs);state.goals.push({id:uid(),projectId:gp,sectionId:gs,title:v,notes:'',targetDate:'',done:false,doneAt:null,order:sib.reduce(function(m,x){return Math.max(m,x.order||0)},0)+1,createdAt:nowISO(),updatedAt:nowISO()})});
     ui.focusQuick='form[data-submit="goaladd"][data-s="'+gs+'"] input';renderMain();
+  }else if(kind==='kadd-all'){
+    var tp=P(ui.kanbanTarget)||GEN(),key=f.getAttribute('data-col'),nm=f.getAttribute('data-name'),made2=false;
+    commit(function(){var nt=createTask({projectId:tp.id,sectionId:tp.sections[0].id,title:v});var r=ensureCol(tp,key,nm);made2=r.created;setColumn(nt,r.id);nt.kOrder=state.tasks.reduce(function(m,x){return Math.max(m,x.kOrder||0)},0)+1});
+    ui.focusQuick='form[data-submit="kadd-all"][data-col="'+key.replace(/"/g,'\\"')+'"] input';renderMain();
+    if(made2)toast('Added a \u201c'+nm+'\u201d column to '+tp.name);
   }else if(kind==='kadd'){
     var kp=P(f.getAttribute('data-project')),kc=f.getAttribute('data-col');
     commit(function(){var nt=createTask({projectId:kp.id,sectionId:kp.sections[0].id,title:v});setColumn(nt,kc);nt.kOrder=nextKOrder(kp.id)});
@@ -2398,6 +2498,7 @@ document.addEventListener('change',function(e){
   if(ch==='name-umbrella'||ch==='name-overall'){var nv=el.value.trim();commit(function(){labels()[ch==='name-umbrella'?'umbrella':'overallGoals']=nv});return}
   if(ch==='cal-spans'){ui.calSpans=el.checked;saveUI();renderMain();return}
   if(ch==='stats-project'){ui.statsProject=el.value||null;saveUI();renderMain();return}
+  if(ch==='kanban-target'){ui.kanbanTarget=el.value;saveUI();return}
   if(ch==='kanban-subtasks'){ui.kanbanSubtasks=el.checked;saveUI();renderMain();return}
   if(ch==='import-file'){
     var file=el.files&&el.files[0];if(!file)return;
