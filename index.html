@@ -1161,12 +1161,12 @@ function renderSettings(){
     (needsExport()?'<p class="warnline">This device has changes that haven\u2019t been exported yet.</p>':(ps?'<p class="okline">Everything on this device has been exported or imported.</p>':''))+
     '<div class="sub">Export</div><div class="row"><button class="btn primary" data-act="copy-code">Copy code</button><button class="btn" data-act="save-file">Save as file</button>'+(share?'<button class="btn" data-act="share-code">Share\u2026</button>':'')+'</div>'+
     '<textarea class="inp code-box" id="export-box" readonly rows="3" style="margin-top:10px" aria-label="Copy code" placeholder="Preparing code\u2026"></textarea>'+
-    '<div class="sub">Import</div><textarea class="inp code-box" id="import-box" rows="3" placeholder="Paste a copy code here" aria-label="Paste copy code"></textarea>'+
-    '<div class="row" style="margin-top:10px"><button class="btn primary" data-act="import-code">Import code</button><label class="btn" style="cursor:pointer">Open file\u2026<input type="file" id="import-file" accept=".ppcode,.txt,.json,text/plain,application/json" data-change="import-file" class="sr"></label></div></section>';
+    '<div class="sub">Import</div><textarea class="inp code-box" id="import-box" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" rows="3" placeholder="Paste a copy code here" aria-label="Paste copy code"></textarea>'+
+    '<div class="row" style="margin-top:10px"><button class="btn primary" data-act="import-code">Import code</button>'+(navigator.clipboard&&navigator.clipboard.readText?'<button class="btn" data-act="paste-import">Paste & import</button>':'')+'<label class="btn" style="cursor:pointer">Open file\u2026<input type="file" id="import-file" data-change="import-file" class="sr"></label></div></section>';
   h+='<section class="card"><h3>Backups</h3><p>A backup is saved automatically on this device before every import, restore or erase.</p>'+
     (backups.length?'<ul class="backups">'+backups.map(function(b){return '<li><div><b>'+esc(fmtStamp(b.at))+'</b><small>'+esc(b.reason)+' \u00b7 '+plural(b.projects,'project')+', '+plural(b.tasks,'task')+'</small></div><button class="btn sm" data-act="restore" data-id="'+b.id+'">Restore</button></li>'}).join('')+'</ul>':'<p class="muted" style="margin:0;font-size:14px">No backups yet.</p>')+'</section>';
   h+='<section class="card danger"><h3>Erase all data</h3><p>Removes every project and task from this device. A backup is kept first.</p><button class="btn danger" data-act="erase">Erase all data</button></section>';
-  h+='<p class="about">Project Planner \u00b7 version d26d4eb5eb \u00b7 your data stays on this device</p>';
+  h+='<p class="about">Project Planner \u00b7 version 24b1a9cd55 \u00b7 your data stays on this device</p>';
   return h;
 }
 function afterSettings(){
@@ -1188,19 +1188,47 @@ function encodeState(){
   }
   return Promise.resolve('PPLAN0:'+toB64(bytes));
 }
+/* Tolerant code reader: survives text added or changed by mail, messages, notes and phone keyboards. */
+function cleanCode(text){
+  var t=String(text||'');
+  try{t=t.normalize('NFKC')}catch(_){}
+  t=t.replace(/[\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF\u00AD\u00A0]/g,' ');
+  if(/%[0-9A-Fa-f]{2}/.test(t)){try{t=decodeURIComponent(t.replace(/\+/g,'%2B'))}catch(_){}}
+  t=t.replace(/^[ \t]*>+[ \t]?/gm,'');
+  var head=t.match(/pplan\s*([01])\s*[:\uFF1A;]/i);if(!head)return null;
+  var body=t.slice(head.index+head[0].length);
+  var stop=body.search(/[^A-Za-z0-9+\/=_\-\s]/);if(stop>-1)body=body.slice(0,stop);
+  var tokens=body.split(/\s+/).filter(Boolean),cands=[],end=tokens.length;
+  for(var i=0;i<tokens.length;i++)if(/=$/.test(tokens[i])){end=i+1;break}
+  for(var k=end;k>=1&&cands.length<12;k--){
+    var c=tokens.slice(0,k).join('').replace(/-/g,'+').replace(/_/g,'/').replace(/=+$/,'').replace(/=/g,'');
+    if(c.length<8)continue;while(c.length%4)c+='=';
+    if(cands.indexOf(c)<0)cands.push(c);
+  }
+  return cands.length?{kind:head[1],cands:cands}:null;
+}
+function decodeOne(kind,b64){
+  var bytes;try{bytes=fromB64(b64)}catch(e){return Promise.reject(e)}
+  var p;
+  if(kind==='1'){
+    if(typeof DecompressionStream==='undefined')return Promise.reject(new Error('old'));
+    p=new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer().then(function(b){return new Uint8Array(b)});
+  }else p=Promise.resolve(bytes);
+  return p.then(function(b){var o=JSON.parse(new TextDecoder().decode(b));if(!o||!Array.isArray(o.projects))throw new Error('shape');return o});
+}
 function decodeCode(text){
   text=(text||'').trim();
   if(!text)return Promise.reject(new Error('Paste a copy code first.'));
-  if(text.charAt(0)==='{'){try{return Promise.resolve(JSON.parse(text))}catch(e){return Promise.reject(new Error('That file couldn\u2019t be read.'))}}
-  var m=text.replace(/\s+/g,'').match(/^PPLAN([01]):([A-Za-z0-9+/=]+)$/);
-  if(!m)return Promise.reject(new Error('This doesn\u2019t look like a Project Planner code. Make sure you copied all of it.'));
-  var bytes;try{bytes=fromB64(m[2])}catch(e){return Promise.reject(new Error('The code is incomplete or damaged.'))}
-  var p;
-  if(m[1]==='1'){
-    if(typeof DecompressionStream==='undefined')return Promise.reject(new Error('This browser is too old to read the code. Update it and try again.'));
-    p=new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer().then(function(b){return new Uint8Array(b)});
-  }else p=Promise.resolve(bytes);
-  return p.then(function(b){return JSON.parse(new TextDecoder().decode(b))}).catch(function(){throw new Error('The code is incomplete or damaged.')});
+  if(text.charAt(0)==='{'){try{return Promise.resolve(JSON.parse(text))}catch(e){return Promise.reject(new Error('That file couldn’t be read.'))}}
+  var m=cleanCode(text);
+  if(!m)return Promise.reject(new Error('This doesn’t look like a Project Planner code. Make sure you copied all of it, starting with “PPLAN”.'));
+  if(m.kind==='1'&&typeof DecompressionStream==='undefined')return Promise.reject(new Error('This browser is too old to read the code. Update the phone’s software and try again.'));
+  var i=0;
+  function next(){
+    if(i>=m.cands.length)return Promise.reject(new Error('The code is incomplete or damaged — it may have been cut off when it was copied. Try sending it as a file instead (Settings → Save as file, then Open file… on the other device).'));
+    return decodeOne(m.kind,m.cands[i++]).catch(next);
+  }
+  return next();
 }
 function getCode(){
   if(exportCache.version===state.updatedAt&&exportCache.code)return Promise.resolve(exportCache.code);
@@ -1517,6 +1545,7 @@ var A={
       return navigator.share(data).then(function(){markExported();render();toast('Shared')});
     }).catch(function(e){if(e&&e.name!=='AbortError')toast('Sharing didn\u2019t work here \u2014 use Copy code instead')});
   },
+  'paste-import':function(){navigator.clipboard.readText().then(function(t){var b=$('#import-box');if(b)b.value=t;importFromText(t)},function(){toast('Couldn\u2019t read the clipboard \u2014 long-press the box and choose Paste instead')})},
   'import-code':function(){var b=$('#import-box');importFromText(b?b.value:'')},
   'restore':function(el){
     var list=lsJSON(BACKUP_KEY,[]),b=list.find(function(x){return x.id===el.getAttribute('data-id')});if(!b)return;
